@@ -32,6 +32,57 @@ Inspired by the classic community tool on Guru3D and [Sathango/Msi-Utility-v3](h
 
 ---
 
+## UI Columns & Configurable Parameters
+
+Summary of all columns displayed in the application grid, distinguishing between user-configurable parameters and read-only diagnostic info.
+
+### User-Configurable Parameters (4 Items)
+
+| Column Name | Input Type | Description & Purpose | Registry Target |
+|---|:---:|---|---|
+| **`msi`** | Checkbox | **MSI Mode Toggle**<br>・Checked: Message Signaled Interrupts (Low-latency mode)<br>・Unchecked: Legacy Line-based IRQ sharing | `MSISupported` (DWORD) |
+| **`limit`** | Text Input | **Maximum MSI Message (Vector) Limit**<br>・Blank: Windows/Driver dynamically assigns optimal queue count<br>・`1`: Forces single-vector operation for dedicated core isolation | `MessageNumberLimit` (DWORD) |
+| **`priority`** | Dropdown | **Interrupt Processing Priority**<br>・`Undefined` (Driver default)<br>・`Low` / `Normal` / `High` | `DevicePriority` (DWORD) |
+| **`affinity`**<br>(P0, P1, E12...) | Core Checkboxes | **Target CPU Cores for Interrupt Servicing**<br>・All Clear: Dynamic OS scheduling across all available cores<br>・Selected: Restricts interrupt routing strictly to the chosen CPU core set | `DevicePolicy` = 4<br>`AssignmentSetOverride` (DWORD / QWORD) |
+
+### Read-Only Diagnostic & Capability Information (6 Items)
+
+| Column Name | Access | Description |
+|---|:---:|---|
+| **`device`** | Read-Only | Friendly device name and hardware identifier (PCI ID) |
+| **`vendor`** | Read-Only | Hardware manufacturer name (NVIDIA, Intel, Realtek, Samsung, etc.) |
+| **`type`** | Read-Only | Hardware category classification (GPU, Network, Storage, USB, Audio, etc.) |
+| **`max limit`** | Read-Only | Theoretical maximum message vector count supported by the hardware capability |
+| **`supported modes`** | Read-Only | Interrupt signaling capabilities supported by the device (LineBased, Msi, MsiX) |
+| **`irq`** | Read-Only | Currently assigned hardware IRQ number in the active Windows session |
+
+---
+
+## Deep Dive: Limit, Max Limit, and Core Affinity Tuning
+
+### 1. Understanding `limit` vs. `max limit`
+- **`max limit` (Hardware Capability, Read-Only)**:
+  - The maximum number of MSI/MSI-X messages (vectors) supported by the PCIe hardware and its specification.
+  - Typical values: GPU / Audio / SATA: `1`, USB 3.x xHCI: `8`, 2.5GbE / 10GbE LAN: `32`, NVMe SSD: `33` (1 Admin + 32 I/O queues).
+- **`limit` (Configured Value, `MessageNumberLimit`)**:
+  - The registry parameter instructing Windows PnP on the maximum number of MSI messages to allocate to the device.
+  - **Blank (Unset)**: Windows and the device driver automatically determine the optimal count (usually matching the number of hardware queues).
+  - **Explicit Number (e.g., `1`)**: Constrains allocated message vectors to that exact ceiling.
+
+### 2. Independence of Core Affinity and Limit
+In the Windows PnP interrupt architecture, **"How many messages to allocate (`MessageNumberLimit`)"** and **"Which CPU cores should service those messages (`AssignmentSetOverride`)"** are strictly orthogonal and independent policies.
+
+Restricting affinity to **a single CPU core does NOT cause Windows to automatically collapse the message count to 1**.
+
+### 3. Recommended Tuning Strategies
+
+| Tuning Goal | Recommended `limit` | Recommended `Affinity` | Architecture & Behavior |
+|---|:---:|:---:|---|
+| **Ultra-Low Latency & Exclusive Core**<br>(Competitive Gaming, Pro Audio) | **`1`** | **Single CPU Core** | Forces the device into single-vector mode. Eliminates DPC serialization spikes, queue bottlenecks, and vector saturation on the target core. |
+| **High Throughput & Queue Parallelism**<br>(NVMe SSDs, 2.5GbE/10GbE Network) | **Blank**<br>(Unset) | **Multiple Cores** or **Single Core** | Preserves all multi-queue channels (e.g., 64 NVMe I/O queues or multi-channel RSS). If assigned to a single core, all completion vectors target that core without sacrificing queue depth. |
+
+---
+
 ## Requirements
 
 - **OS**: Windows 10 (1809+) or Windows 11 (64-bit)

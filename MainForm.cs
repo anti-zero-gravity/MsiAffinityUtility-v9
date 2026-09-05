@@ -628,7 +628,7 @@ namespace MsiAffinityUtility
                                 }
                                 else
                                 {
-                                    applySb.AppendLine($"\"AssignmentSetOverride\"=hex(b):{FormatHexQWord(curMask)}");
+                                    applySb.AppendLine($"\"AssignmentSetOverride\"=qword:{curMask:x16}");
                                 }
                             }
                             else
@@ -690,7 +690,7 @@ namespace MsiAffinityUtility
                             }
                             else
                             {
-                                rollbackSb.AppendLine($"\"AssignmentSetOverride\"=hex(b):{FormatHexQWord(baseMask)}");
+                                rollbackSb.AppendLine($"\"AssignmentSetOverride\"=qword:{baseMask:x16}");
                             }
                         }
                         else
@@ -796,11 +796,6 @@ namespace MsiAffinityUtility
             btnGenerate.Location = new Point(btnExport.Left - btnGenerate.Width - gap, (int)(4 * s));
         }
 
-        private static string FormatHexQWord(ulong val)
-        {
-            byte[] bytes = BitConverter.GetBytes(val);
-            return string.Join(",", bytes.Select(b => b.ToString("x2")));
-        }
 
         private void BtnExport_Click(object? sender, EventArgs e)
         {
