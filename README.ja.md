@@ -2,7 +2,7 @@
 
 ---
 
-# MSI Affinity Utility (v9.0)
+# MSI Affinity Utility v9
 
 **MSI Affinity Utility** は、Windowsのハードウェア割り込み（IRQ）を高精度にチューニングするための最適化ツールです。  
 クラシックな MSI（Message Signaled-based Interrupts）設定ツールの思想を受け継ぎつつ、**CPUコア・アフィニティ（コア割り当て）の詳細設定（Intel Pコア/Eコア自動判別対応）** や、安心の **ワンクリック復元（ロールバック `.reg` スクリプト自動生成）** 機能を独自に追加・拡張しています。

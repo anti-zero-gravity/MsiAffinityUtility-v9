@@ -2,7 +2,7 @@
 
 ---
 
-# MSI Affinity Utility (v9.0)
+# MSI Affinity Utility v9
 
 **MSI Affinity Utility** is an advanced Windows hardware interrupt configuration tool.  
 It extends the classic MSI (Message Signaled-based Interrupts) utility concept by adding fine-grained **CPU Core Affinity management** (including Intel P-core / E-core hybrid architecture awareness) and instant registry **backup & rollback** generation.
