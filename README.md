@@ -1,3 +1,7 @@
+[English](README.md) | [日本語](README.ja.md)
+
+---
+
 # MSI Affinity Utility (v9.0)
 
 **MSI Affinity Utility** is an advanced Windows hardware interrupt configuration tool.  
