@@ -22,9 +22,9 @@ Inspired by the classic community tool on Guru3D and [Sathango/Msi-Utility-v3](h
    - Automatically detects CPU topology and distinguishes **P-cores (Performance)** and **E-cores (Efficiency)** on modern Intel processors.
    - Core labels like `P0`, `P1`, `E12` or `E0`, `E1` (for all-E-core processors such as N100/N95) for intuitive assignment.
 
-3. **Safe Apply & Automatic Rollback Backup**
-   - **Apply Changes with Auto-Backup**: Writes changes to the Windows registry with administrator privileges. A rollback `.reg` script representing the exact state before changes is **automatically saved to your Downloads folder** every time you apply, eliminating human error or forgotten exports.
-   - **Rollback / Backup Script**: Preserves the initial launch state (Launch Snapshot) permanently across multiple apply sessions, allowing one-click restoration to your original settings at any time.
+3. **Safe Apply & One-Click Rollback Script**
+   - **Apply Changes**: Apply settings directly to the Windows registry with administrator privileges.
+   - **Rollback / Backup Script**: Automatically generates a `.reg` script representing the exact original state before your changes, allowing instant restoration if needed. Preserves the initial launch state so you can always export a rollback script back to your starting settings.
 
 4. **Modern UI & High-DPI Support**
    - Built with Windows Forms on .NET 8, fully DPI-aware (Per-Monitor V2).

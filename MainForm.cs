@@ -903,26 +903,7 @@ namespace MsiAffinityUtility
                 applyRegScript = applyText;
                 rollbackRegScript = rollbackText;
 
-                // 2. 自動バックアップ .reg ファイルを保存（ダウンロードフォルダなどへ）
-                string autoBackupPath = "";
-                try
-                {
-                    string folder = GetDownloadsFolderPath();
-                    if (!Directory.Exists(folder))
-                    {
-                        folder = AppDomain.CurrentDomain.BaseDirectory;
-                    }
-                    string backupFileName = $"MsiAffinity_Backup_{DateTime.Now:yyyyMMdd_HHmmss}.reg";
-                    autoBackupPath = Path.Combine(folder, backupFileName);
-                    Encoding ansi = Encoding.GetEncoding(0);
-                    File.WriteAllText(autoBackupPath, rollbackRegScript, ansi);
-                }
-                catch (Exception bEx)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Auto-backup save warning: {bEx.Message}");
-                }
-
-                // 3. レジストリへ適用
+                // 2. レジストリへ適用
                 int modifiedCount = 0;
 
                 foreach (DataGridViewRow row in dgv.Rows)
@@ -1038,22 +1019,8 @@ namespace MsiAffinityUtility
                 btnExport.Visible = true;
                 AdjustButtonPositions();
 
-                var msgSb = new StringBuilder();
-                msgSb.AppendLine($"Settings successfully applied to registry. (Modified: {modifiedCount} devices)");
-                msgSb.AppendLine();
-                if (!string.IsNullOrEmpty(autoBackupPath) && File.Exists(autoBackupPath))
-                {
-                    msgSb.AppendLine("[Safety Auto-Backup Created]");
-                    msgSb.AppendLine("A rollback script before these changes was automatically saved to:");
-                    msgSb.AppendLine(autoBackupPath);
-                    msgSb.AppendLine("(Double-click this .reg file anytime to restore previous settings)");
-                    msgSb.AppendLine();
-                    lblStatus.Text = $"Applied ({modifiedCount} devices). Auto-Backup: {Path.GetFileName(autoBackupPath)}";
-                }
-                msgSb.AppendLine("A system reboot is required for hardware changes to take effect.");
-
                 MessageBox.Show(
-                    msgSb.ToString(),
+                    $"Settings successfully applied to registry. (Modified: {modifiedCount} devices)\r\n\r\nA system reboot is required for hardware changes to take effect.",
                     "MSI mode utility",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information
