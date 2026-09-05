@@ -18,12 +18,19 @@ namespace MsiAffinityUtility
         public ulong AffinityMask { get; set; }
         public bool HasAffinityPolicy { get; set; }
 
-        // 変更差分検出用の初期状態バックアップ
+        // 変更差分検出用の直近状態
         public bool OrigMsi { get; set; }
         public string OrigLimit { get; set; } = "";
         public string OrigPriority { get; set; } = "Undefined";
         public ulong OrigAffinityMask { get; set; }
         public bool OrigHasAffinityPolicy { get; set; }
+
+        // アプリ起動時の真の初期状態（Apply後も絶対に上書きされない永久バックアップ用）
+        public bool LaunchMsi { get; set; }
+        public string LaunchLimit { get; set; } = "";
+        public string LaunchPriority { get; set; } = "Undefined";
+        public ulong LaunchAffinityMask { get; set; }
+        public bool LaunchHasAffinityPolicy { get; set; }
 
         public string RegistryPath => $@"SYSTEM\CurrentControlSet\Enum\{InstancePath}";
     }
@@ -145,7 +152,13 @@ namespace MsiAffinityUtility
                         OrigLimit = limit,
                         OrigPriority = priority,
                         OrigAffinityMask = affinityMask,
-                        OrigHasAffinityPolicy = hasAffinity
+                        OrigHasAffinityPolicy = hasAffinity,
+
+                        LaunchMsi = msiSupported,
+                        LaunchLimit = limit,
+                        LaunchPriority = priority,
+                        LaunchAffinityMask = affinityMask,
+                        LaunchHasAffinityPolicy = hasAffinity
                     });
                 }
             }

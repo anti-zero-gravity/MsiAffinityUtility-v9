@@ -507,7 +507,7 @@ namespace MsiAffinityUtility
             }
         }
 
-        private void BtnGenerate_Click(object? sender, EventArgs e)
+        private (string applyScript, string rollbackScript, int changeCount) GenerateRegistryScripts(bool fromLaunchSnapshot = false)
         {
             var applySb = new StringBuilder();
             applySb.AppendLine("Windows Registry Editor Version 5.00");
@@ -521,7 +521,9 @@ namespace MsiAffinityUtility
             rollbackSb.AppendLine("Windows Registry Editor Version 5.00");
             rollbackSb.AppendLine();
             rollbackSb.AppendLine("; ========================================================");
-            rollbackSb.AppendLine("; Backup / Rollback Script (Restore before changes)");
+            rollbackSb.AppendLine(fromLaunchSnapshot
+                ? "; Backup / Rollback Script (Restore to initial launch state)"
+                : "; Backup / Rollback Script (Restore before changes)");
             rollbackSb.AppendLine("; ========================================================");
             rollbackSb.AppendLine();
 
@@ -547,10 +549,16 @@ namespace MsiAffinityUtility
                     }
                 }
 
-                bool msiChanged = (curMsi != dev.OrigMsi);
-                bool limitChanged = (!string.Equals(curLimit, dev.OrigLimit, StringComparison.OrdinalIgnoreCase));
-                bool priChanged = (!string.Equals(curPriority, dev.OrigPriority, StringComparison.OrdinalIgnoreCase));
-                bool affinityChanged = (hasCheckedCore != dev.OrigHasAffinityPolicy) || (hasCheckedCore && curMask != dev.OrigAffinityMask);
+                bool baseMsi = fromLaunchSnapshot ? dev.LaunchMsi : dev.OrigMsi;
+                string baseLimit = fromLaunchSnapshot ? dev.LaunchLimit : dev.OrigLimit;
+                string basePriority = fromLaunchSnapshot ? dev.LaunchPriority : dev.OrigPriority;
+                ulong baseMask = fromLaunchSnapshot ? dev.LaunchAffinityMask : dev.OrigAffinityMask;
+                bool baseHasAffinity = fromLaunchSnapshot ? dev.LaunchHasAffinityPolicy : dev.OrigHasAffinityPolicy;
+
+                bool msiChanged = (curMsi != baseMsi);
+                bool limitChanged = (!string.Equals(curLimit, baseLimit, StringComparison.OrdinalIgnoreCase));
+                bool priChanged = (!string.Equals(curPriority, basePriority, StringComparison.OrdinalIgnoreCase));
+                bool affinityChanged = (hasCheckedCore != baseHasAffinity) || (hasCheckedCore && curMask != baseMask);
 
                 if (!msiChanged && !limitChanged && !priChanged && !affinityChanged)
                 {
@@ -641,8 +649,8 @@ namespace MsiAffinityUtility
                 if (msiChanged || limitChanged)
                 {
                     rollbackSb.AppendLine($@"[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\{devicePath}\Device Parameters\Interrupt Management\MessageSignaledInterruptProperties]");
-                    rollbackSb.AppendLine($"\"MSISupported\"=dword:{(dev.OrigMsi ? 1 : 0):x8}");
-                    if (int.TryParse(dev.OrigLimit, out int origLim) && origLim > 0)
+                    rollbackSb.AppendLine($"\"MSISupported\"=dword:{(baseMsi ? 1 : 0):x8}");
+                    if (int.TryParse(baseLimit, out int origLim) && origLim > 0)
                     {
                         rollbackSb.AppendLine($"\"MessageNumberLimit\"=dword:{origLim:x8}");
                     }
@@ -655,7 +663,7 @@ namespace MsiAffinityUtility
 
                 if (priChanged || affinityChanged)
                 {
-                    if (!dev.OrigHasAffinityPolicy && dev.OrigPriority == "Undefined")
+                    if (!baseHasAffinity && basePriority == "Undefined")
                     {
                         rollbackSb.AppendLine($@"[-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\{devicePath}\Device Parameters\Interrupt Management\Affinity Policy]");
                         rollbackSb.AppendLine();
@@ -663,26 +671,26 @@ namespace MsiAffinityUtility
                     else
                     {
                         rollbackSb.AppendLine($@"[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\{devicePath}\Device Parameters\Interrupt Management\Affinity Policy]");
-                        if (dev.OrigPriority == "Undefined")
+                        if (basePriority == "Undefined")
                         {
                             rollbackSb.AppendLine("\"DevicePriority\"=-");
                         }
                         else
                         {
-                            int pVal = dev.OrigPriority switch { "Low" => 1, "Normal" => 2, "High" => 3, _ => 0 };
+                            int pVal = basePriority switch { "Low" => 1, "Normal" => 2, "High" => 3, _ => 0 };
                             rollbackSb.AppendLine($"\"DevicePriority\"=dword:{pVal:x8}");
                         }
 
-                        if (dev.OrigHasAffinityPolicy && dev.OrigAffinityMask > 0)
+                        if (baseHasAffinity && baseMask > 0)
                         {
                             rollbackSb.AppendLine("\"DevicePolicy\"=dword:00000004");
-                            if (dev.OrigAffinityMask <= uint.MaxValue)
+                            if (baseMask <= uint.MaxValue)
                             {
-                                rollbackSb.AppendLine($"\"AssignmentSetOverride\"=dword:{dev.OrigAffinityMask:x8}");
+                                rollbackSb.AppendLine($"\"AssignmentSetOverride\"=dword:{baseMask:x8}");
                             }
                             else
                             {
-                                rollbackSb.AppendLine($"\"AssignmentSetOverride\"=hex(b):{FormatHexQWord(dev.OrigAffinityMask)}");
+                                rollbackSb.AppendLine($"\"AssignmentSetOverride\"=hex(b):{FormatHexQWord(baseMask)}");
                             }
                         }
                         else
@@ -701,8 +709,14 @@ namespace MsiAffinityUtility
                 rollbackSb.AppendLine("; (No changes to rollback)");
             }
 
-            applyRegScript = applySb.ToString();
-            rollbackRegScript = rollbackSb.ToString();
+            return (applySb.ToString(), rollbackSb.ToString(), changeCount);
+        }
+
+        private void BtnGenerate_Click(object? sender, EventArgs e)
+        {
+            var (apply, rollback, _) = GenerateRegistryScripts(fromLaunchSnapshot: false);
+            applyRegScript = apply;
+            rollbackRegScript = rollback;
 
             isViewingRollback = false;
             SwitchConsoleView(false);
@@ -792,10 +806,21 @@ namespace MsiAffinityUtility
         {
             // Export を押したら即座に Rollback / Backup プレビューへ切り替えてハイライト
             SwitchConsoleView(true);
+
+            // もし直近の差分がない場合（すでにApply済みなど）、LaunchSnapshot（起動時状態からの全差分）からロールバックを再生成！
             if (string.IsNullOrWhiteSpace(rollbackRegScript) || rollbackRegScript.Contains("(No changes to rollback)"))
             {
-                MessageBox.Show("No changes detected to backup. Please modify settings and click Generate first.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                var (_, launchRollback, launchCount) = GenerateRegistryScripts(fromLaunchSnapshot: true);
+                if (launchCount > 0)
+                {
+                    rollbackRegScript = launchRollback;
+                    txtConsole.Text = rollbackRegScript;
+                }
+                else
+                {
+                    MessageBox.Show("No changes detected to backup. Please modify settings and click Generate first.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
             }
 
             // Resolve accurate Downloads folder (handles redirected paths like E:\YK-PC\Downloads)
@@ -867,6 +892,37 @@ namespace MsiAffinityUtility
 
             try
             {
+                // 1. まず現在の変更に対するロールバックスクリプトを事前生成（適用前の値を安全に記録）
+                var (applyText, rollbackText, changeCount) = GenerateRegistryScripts(fromLaunchSnapshot: false);
+                if (changeCount == 0)
+                {
+                    MessageBox.Show("No changes detected to apply.", "MSI mode utility", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                applyRegScript = applyText;
+                rollbackRegScript = rollbackText;
+
+                // 2. 自動バックアップ .reg ファイルを保存（ダウンロードフォルダなどへ）
+                string autoBackupPath = "";
+                try
+                {
+                    string folder = GetDownloadsFolderPath();
+                    if (!Directory.Exists(folder))
+                    {
+                        folder = AppDomain.CurrentDomain.BaseDirectory;
+                    }
+                    string backupFileName = $"MsiAffinity_Backup_{DateTime.Now:yyyyMMdd_HHmmss}.reg";
+                    autoBackupPath = Path.Combine(folder, backupFileName);
+                    Encoding ansi = Encoding.GetEncoding(0);
+                    File.WriteAllText(autoBackupPath, rollbackRegScript, ansi);
+                }
+                catch (Exception bEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Auto-backup save warning: {bEx.Message}");
+                }
+
+                // 3. レジストリへ適用
                 int modifiedCount = 0;
 
                 foreach (DataGridViewRow row in dgv.Rows)
@@ -968,6 +1024,7 @@ namespace MsiAffinityUtility
                         }
                     }
 
+                    // 直近状態を更新（※dev.LaunchMsi などの起動時スナップショットは永久不変で保持）
                     dev.OrigMsi = curMsi;
                     dev.OrigLimit = curLimit;
                     dev.OrigPriority = curPriority;
@@ -977,8 +1034,26 @@ namespace MsiAffinityUtility
                     modifiedCount++;
                 }
 
+                consoleContainer.Visible = true;
+                btnExport.Visible = true;
+                AdjustButtonPositions();
+
+                var msgSb = new StringBuilder();
+                msgSb.AppendLine($"Settings successfully applied to registry. (Modified: {modifiedCount} devices)");
+                msgSb.AppendLine();
+                if (!string.IsNullOrEmpty(autoBackupPath) && File.Exists(autoBackupPath))
+                {
+                    msgSb.AppendLine("[Safety Auto-Backup Created]");
+                    msgSb.AppendLine("A rollback script before these changes was automatically saved to:");
+                    msgSb.AppendLine(autoBackupPath);
+                    msgSb.AppendLine("(Double-click this .reg file anytime to restore previous settings)");
+                    msgSb.AppendLine();
+                    lblStatus.Text = $"Applied ({modifiedCount} devices). Auto-Backup: {Path.GetFileName(autoBackupPath)}";
+                }
+                msgSb.AppendLine("A system reboot is required for hardware changes to take effect.");
+
                 MessageBox.Show(
-                    $"Settings successfully applied to registry. (Modified: {modifiedCount} devices)\r\n\r\nA system reboot is required for hardware changes to take effect.",
+                    msgSb.ToString(),
                     "MSI mode utility",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information
