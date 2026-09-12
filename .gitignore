@@ -1,11 +1,24 @@
 ## Visual Studio / .NET
-bin/
-obj/
-publish/
+[Bb]in/
+[Oo]bj/
+[Pp]ublish/
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
+.vs/
+.vscode/
+
+## Build Artifacts
+*.exe
+*.dll
+*.pdb
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+build/
+bld/
 
 ## Windows
 Thumbs.db
@@ -13,7 +26,14 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
-## Build Artifacts
-*.exe
-*.dll
-*.pdb
+## Temporary / Logs
+*.log
+*.tmp
+
+## Local Documents & AI Agents (Excluded from GitHub)
+arc.md
+spec.md
+plan.md
+.agents/
+docs/
+settings.ini

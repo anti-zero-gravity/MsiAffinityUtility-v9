@@ -49,10 +49,7 @@ namespace MsiAffinityUtility
             if (scale <= 0) scale = 1.0f;
 
             this.Text = "MSI mode utility";
-            int initWidth = Math.Min(Screen.PrimaryScreen?.WorkingArea.Width ?? 1400, (int)(1250 * scale));
-            int initHeight = Math.Min(Screen.PrimaryScreen?.WorkingArea.Height ?? 750, (int)(600 * scale));
-            this.Size = new Size(initWidth, initHeight);
-            this.StartPosition = FormStartPosition.CenterScreen;
+            LoadWindowSettingsFromIni();
 
             this.Font = SystemFonts.MessageBoxFont ?? new Font("MS UI Gothic", 9F, FontStyle.Regular, GraphicsUnit.Point);
             this.BackColor = SystemColors.Control;
@@ -196,14 +193,15 @@ namespace MsiAffinityUtility
                 int topY = (int)(2 * scale);
                 int closeW = (int)(28 * scale);
                 btnCloseConsole.Location = new Point(w - closeW - (int)(4 * scale), topY);
-                btnViewRollback.Location = new Point(btnCloseConsole.Left - btnViewRollback.Width - (int)(6 * scale), topY);
-                btnViewApply.Location = new Point(btnViewRollback.Left - btnViewApply.Width - (int)(4 * scale), topY);
+                // 下の操作ボタンと合わせ、左に Rollback / Backup、右に Apply Changes を配置
+                btnViewApply.Location = new Point(btnCloseConsole.Left - btnViewApply.Width - (int)(6 * scale), topY);
+                btnViewRollback.Location = new Point(btnViewApply.Left - btnViewRollback.Width - (int)(4 * scale), topY);
             }
             consoleHeaderPanel.Resize += (s, e) => LayoutConsoleHeader();
 
             consoleHeaderPanel.Controls.Add(lblConsoleHeader);
-            consoleHeaderPanel.Controls.Add(btnViewApply);
             consoleHeaderPanel.Controls.Add(btnViewRollback);
+            consoleHeaderPanel.Controls.Add(btnViewApply);
             consoleHeaderPanel.Controls.Add(btnCloseConsole);
             consoleContainer.Controls.Add(consoleHeaderPanel);
             LayoutConsoleHeader();
@@ -213,7 +211,7 @@ namespace MsiAffinityUtility
                 Dock = DockStyle.Fill,
                 Multiline = true,
                 ReadOnly = true,
-                ScrollBars = ScrollBars.Both,
+                ScrollBars = ScrollBars.Vertical,
                 WordWrap = false,
                 BackColor = Color.FromArgb(18, 18, 18),
                 ForeColor = Color.FromArgb(240, 240, 240),
@@ -264,6 +262,9 @@ namespace MsiAffinityUtility
                 ScrollBars = ScrollBars.Both,
                 RowTemplate = { Height = rowHeight }
             };
+
+            dgv.DefaultCellStyle.SelectionBackColor = Color.FromArgb(225, 238, 254);
+            dgv.DefaultCellStyle.SelectionForeColor = Color.Black;
 
             dgv.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
             dgv.ColumnHeadersDefaultCellStyle.ForeColor = Color.Black;
@@ -323,6 +324,7 @@ namespace MsiAffinityUtility
                 HeaderText = "msi",
                 Width = (int)(40 * s),
                 FlatStyle = FlatStyle.Standard,
+                SortMode = DataGridViewColumnSortMode.Automatic,
                 DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleCenter }
             };
             dgv.Columns.Add(colMsi);
@@ -406,6 +408,9 @@ namespace MsiAffinityUtility
             await Task.Run(() =>
             {
                 var devices = DeviceScanner.ScanPciDevices();
+                // 初期状態は MSI 降順 (有効が上、無効が下) で整列
+                devices = devices.OrderByDescending(d => d.Msi).ThenBy(d => d.Name).ToList();
+
                 foreach (var dev in devices)
                 {
                     this.Invoke(new Action(() =>
@@ -421,8 +426,18 @@ namespace MsiAffinityUtility
 
             if (dgv.Rows.Count > 0)
             {
-                dgv.Rows[0].Selected = true;
-                UpdateStatusLabel();
+                // MSI 降順で DataGridView の内部ソート状態を確立 (有効が上、ヘッダーに降順グリフ表示)
+                if (dgv.Columns["colMsi"] != null)
+                {
+                    dgv.Sort(dgv.Columns["colMsi"], System.ComponentModel.ListSortDirection.Descending);
+                }
+
+                // 先頭セルの青色ベタ塗り選択を解除し、クリーンな白地で開く
+                dgv.ClearSelection();
+                if (dgv.Rows[0].Tag is PciDeviceInfo dev)
+                {
+                    lblStatus.Text = dev.InstancePath;
+                }
             }
             else
             {
@@ -649,14 +664,20 @@ namespace MsiAffinityUtility
                 if (msiChanged || limitChanged)
                 {
                     rollbackSb.AppendLine($@"[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\{devicePath}\Device Parameters\Interrupt Management\MessageSignaledInterruptProperties]");
-                    rollbackSb.AppendLine($"\"MSISupported\"=dword:{(baseMsi ? 1 : 0):x8}");
-                    if (int.TryParse(baseLimit, out int origLim) && origLim > 0)
+                    if (msiChanged)
                     {
-                        rollbackSb.AppendLine($"\"MessageNumberLimit\"=dword:{origLim:x8}");
+                        rollbackSb.AppendLine($"\"MSISupported\"=dword:{(baseMsi ? 1 : 0):x8}");
                     }
-                    else
+                    if (limitChanged)
                     {
-                        rollbackSb.AppendLine("\"MessageNumberLimit\"=-");
+                        if (int.TryParse(baseLimit, out int origLim) && origLim > 0)
+                        {
+                            rollbackSb.AppendLine($"\"MessageNumberLimit\"=dword:{origLim:x8}");
+                        }
+                        else
+                        {
+                            rollbackSb.AppendLine("\"MessageNumberLimit\"=-");
+                        }
                     }
                     rollbackSb.AppendLine();
                 }
@@ -671,32 +692,38 @@ namespace MsiAffinityUtility
                     else
                     {
                         rollbackSb.AppendLine($@"[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\{devicePath}\Device Parameters\Interrupt Management\Affinity Policy]");
-                        if (basePriority == "Undefined")
+                        if (priChanged)
                         {
-                            rollbackSb.AppendLine("\"DevicePriority\"=-");
-                        }
-                        else
-                        {
-                            int pVal = basePriority switch { "Low" => 1, "Normal" => 2, "High" => 3, _ => 0 };
-                            rollbackSb.AppendLine($"\"DevicePriority\"=dword:{pVal:x8}");
-                        }
-
-                        if (baseHasAffinity && baseMask > 0)
-                        {
-                            rollbackSb.AppendLine("\"DevicePolicy\"=dword:00000004");
-                            if (baseMask <= uint.MaxValue)
+                            if (basePriority == "Undefined")
                             {
-                                rollbackSb.AppendLine($"\"AssignmentSetOverride\"=dword:{baseMask:x8}");
+                                rollbackSb.AppendLine("\"DevicePriority\"=-");
                             }
                             else
                             {
-                                rollbackSb.AppendLine($"\"AssignmentSetOverride\"=qword:{baseMask:x16}");
+                                int pVal = basePriority switch { "Low" => 1, "Normal" => 2, "High" => 3, _ => 0 };
+                                rollbackSb.AppendLine($"\"DevicePriority\"=dword:{pVal:x8}");
                             }
                         }
-                        else
+
+                        if (affinityChanged)
                         {
-                            rollbackSb.AppendLine("\"DevicePolicy\"=-");
-                            rollbackSb.AppendLine("\"AssignmentSetOverride\"=-");
+                            if (baseHasAffinity && baseMask > 0)
+                            {
+                                rollbackSb.AppendLine("\"DevicePolicy\"=dword:00000004");
+                                if (baseMask <= uint.MaxValue)
+                                {
+                                    rollbackSb.AppendLine($"\"AssignmentSetOverride\"=dword:{baseMask:x8}");
+                                }
+                                else
+                                {
+                                    rollbackSb.AppendLine($"\"AssignmentSetOverride\"=qword:{baseMask:x16}");
+                                }
+                            }
+                            else
+                            {
+                                rollbackSb.AppendLine("\"DevicePolicy\"=-");
+                                rollbackSb.AppendLine("\"AssignmentSetOverride\"=-");
+                            }
                         }
                         rollbackSb.AppendLine();
                     }
@@ -939,64 +966,80 @@ namespace MsiAffinityUtility
                     if (intKey == null) continue;
 
                     // 1. MSI
-                    using (var msiKey = intKey.CreateSubKey("MessageSignaledInterruptProperties", true))
+                    if (msiChanged || limitChanged)
                     {
-                        msiKey.SetValue("MSISupported", curMsi ? 1 : 0, RegistryValueKind.DWord);
-
-                        if (int.TryParse(curLimit, out int limitVal) && limitVal > 0)
+                        using var msiKey = intKey.CreateSubKey("MessageSignaledInterruptProperties", true);
+                        if (msiChanged)
                         {
-                            msiKey.SetValue("MessageNumberLimit", limitVal, RegistryValueKind.DWord);
+                            msiKey.SetValue("MSISupported", curMsi ? 1 : 0, RegistryValueKind.DWord);
                         }
-                        else
+
+                        if (limitChanged)
                         {
-                            try { msiKey.DeleteValue("MessageNumberLimit"); } catch { }
+                            if (int.TryParse(curLimit, out int limitVal) && limitVal > 0)
+                            {
+                                msiKey.SetValue("MessageNumberLimit", limitVal, RegistryValueKind.DWord);
+                            }
+                            else
+                            {
+                                try { msiKey.DeleteValue("MessageNumberLimit"); } catch { }
+                            }
                         }
                     }
 
                     // 2. Affinity Policy
-                    if (!hasCheckedCore && curPriority == "Undefined")
+                    if (priChanged || affinityChanged)
                     {
-                        try
+                        if (!hasCheckedCore && curPriority == "Undefined")
                         {
-                            intKey.DeleteSubKeyTree("Affinity Policy", false);
-                        }
-                        catch { }
-                    }
-                    else
-                    {
-                        using var affKey = intKey.CreateSubKey("Affinity Policy", true);
-                        if (curPriority == "Undefined")
-                        {
-                            try { affKey.DeleteValue("DevicePriority"); } catch { }
+                            try
+                            {
+                                intKey.DeleteSubKeyTree("Affinity Policy", false);
+                            }
+                            catch { }
                         }
                         else
                         {
-                            int priVal = curPriority switch
+                            using var affKey = intKey.CreateSubKey("Affinity Policy", true);
+                            if (priChanged)
                             {
-                                "Low" => 1,
-                                "Normal" => 2,
-                                "High" => 3,
-                                _ => 0
-                            };
-                            affKey.SetValue("DevicePriority", priVal, RegistryValueKind.DWord);
-                        }
+                                if (curPriority == "Undefined")
+                                {
+                                    try { affKey.DeleteValue("DevicePriority"); } catch { }
+                                }
+                                else
+                                {
+                                    int priVal = curPriority switch
+                                    {
+                                        "Low" => 1,
+                                        "Normal" => 2,
+                                        "High" => 3,
+                                        _ => 0
+                                    };
+                                    affKey.SetValue("DevicePriority", priVal, RegistryValueKind.DWord);
+                                }
+                            }
 
-                        if (hasCheckedCore && curMask > 0)
-                        {
-                            affKey.SetValue("DevicePolicy", 4, RegistryValueKind.DWord);
-                            if (curMask <= uint.MaxValue)
+                            if (affinityChanged)
                             {
-                                affKey.SetValue("AssignmentSetOverride", (int)curMask, RegistryValueKind.DWord);
+                                if (hasCheckedCore && curMask > 0)
+                                {
+                                    affKey.SetValue("DevicePolicy", 4, RegistryValueKind.DWord);
+                                    if (curMask <= uint.MaxValue)
+                                    {
+                                        affKey.SetValue("AssignmentSetOverride", (int)curMask, RegistryValueKind.DWord);
+                                    }
+                                    else
+                                    {
+                                        affKey.SetValue("AssignmentSetOverride", (long)curMask, RegistryValueKind.QWord);
+                                    }
+                                }
+                                else
+                                {
+                                    try { affKey.DeleteValue("DevicePolicy"); } catch { }
+                                    try { affKey.DeleteValue("AssignmentSetOverride"); } catch { }
+                                }
                             }
-                            else
-                            {
-                                affKey.SetValue("AssignmentSetOverride", (long)curMask, RegistryValueKind.QWord);
-                            }
-                        }
-                        else
-                        {
-                            try { affKey.DeleteValue("DevicePolicy"); } catch { }
-                            try { affKey.DeleteValue("AssignmentSetOverride"); } catch { }
                         }
                     }
 
@@ -1031,5 +1074,120 @@ namespace MsiAffinityUtility
                 );
             }
         }
+
+        #region Window Settings (INI Persistence & Center Clamping)
+
+        private static string GetSettingsIniPath()
+        {
+            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.ini");
+        }
+
+        private void LoadWindowSettingsFromIni()
+        {
+            var screen = Screen.PrimaryScreen ?? Screen.AllScreens[0];
+            var wa = screen.WorkingArea;
+
+            int defaultLogicalW = 1250;
+            int defaultLogicalH = 600;
+
+            int logicalW = defaultLogicalW;
+            int logicalH = defaultLogicalH;
+            int offsetX = 0;
+            int offsetY = 0;
+            bool isMaximized = false;
+
+            string iniPath = GetSettingsIniPath();
+            if (File.Exists(iniPath))
+            {
+                try
+                {
+                    foreach (var line in File.ReadAllLines(iniPath, Encoding.UTF8))
+                    {
+                        var trimmed = line.Trim();
+                        if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#") || trimmed.StartsWith(";")) continue;
+                        int eqIdx = trimmed.IndexOf('=');
+                        if (eqIdx <= 0) continue;
+                        string key = trimmed.Substring(0, eqIdx).Trim();
+                        string val = trimmed.Substring(eqIdx + 1).Trim();
+
+                        if (key.Equals("OffsetX", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int ox)) offsetX = ox;
+                        else if (key.Equals("OffsetY", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int oy)) offsetY = oy;
+                        else if (key.Equals("LogicalWidth", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int lw) && lw > 400) logicalW = lw;
+                        else if (key.Equals("LogicalHeight", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int lh) && lh > 300) logicalH = lh;
+                        else if (key.Equals("Maximized", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int m)) isMaximized = (m == 1);
+                    }
+                }
+                catch { }
+            }
+
+            // カレント DPI に応じたピクセルサイズ算出
+            int w = (int)(logicalW * scale);
+            int h = (int)(logicalH * scale);
+
+            // FHD 画面等への安全クランプ (現在の作業領域を超えないように上限ガード)
+            w = Math.Min(w, Math.Max(600, wa.Width - 40));
+            h = Math.Min(h, Math.Max(400, wa.Height - 40));
+
+            // 中央ピクセル - サイズ/2 を原点 (0, 0) とした座標計算
+            int centerX = wa.X + (wa.Width - w) / 2;
+            int centerY = wa.Y + (wa.Height - h) / 2;
+
+            int x = centerX + (int)(offsetX * scale);
+            int y = centerY + (int)(offsetY * scale);
+
+            // 画面外飛び出し防止 (タイトルバー・枠が必ず作業領域内に収まるよう境界クランプ)
+            x = Math.Max(wa.X, Math.Min(x, wa.Right - w));
+            y = Math.Max(wa.Y, Math.Min(y, wa.Bottom - h));
+
+            this.StartPosition = FormStartPosition.Manual;
+            this.Bounds = new Rectangle(x, y, w, h);
+
+            if (isMaximized)
+            {
+                this.WindowState = FormWindowState.Maximized;
+            }
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            base.OnFormClosing(e);
+            SaveWindowSettingsToIni();
+        }
+
+        private void SaveWindowSettingsToIni()
+        {
+            try
+            {
+                var screen = Screen.FromControl(this) ?? Screen.PrimaryScreen ?? Screen.AllScreens[0];
+                var wa = screen.WorkingArea;
+
+                Rectangle bounds = (this.WindowState == FormWindowState.Normal) ? this.Bounds : this.RestoreBounds;
+                bool isMaximized = (this.WindowState == FormWindowState.Maximized);
+
+                int logicalW = (int)(bounds.Width / scale);
+                int logicalH = (int)(bounds.Height / scale);
+
+                // 中央座標からの相対オフセットを算出
+                int centerX = wa.X + (wa.Width - bounds.Width) / 2;
+                int centerY = wa.Y + (wa.Height - bounds.Height) / 2;
+
+                int offsetX = (int)((bounds.X - centerX) / scale);
+                int offsetY = (int)((bounds.Y - centerY) / scale);
+
+                string iniPath = GetSettingsIniPath();
+                var sb = new StringBuilder();
+                sb.AppendLine("[Window]");
+                sb.AppendLine($"OffsetX={offsetX}");
+                sb.AppendLine($"OffsetY={offsetY}");
+                sb.AppendLine($"LogicalWidth={logicalW}");
+                sb.AppendLine($"LogicalHeight={logicalH}");
+                sb.AppendLine($"Maximized={(isMaximized ? 1 : 0)}");
+
+                File.WriteAllText(iniPath, sb.ToString(), Encoding.UTF8);
+            }
+            catch { }
+        }
+
+        #endregion
     }
 }
