@@ -93,7 +93,7 @@ Windows の PnP 割り込みマネージャにおいて、**「何本のメッ�
 
 ## ダウンロード
 
-コンパイル済みの実行ファイルは、右側の **[Releases](../../releases)** ページから直接ダウンロードできます：
+コンパイル済みの実行ファイルは、右側の **[Releases](https://github.com/anti-zero-gravity/MsiAffinityUtility-v9/releases)** ページから直接ダウンロードできます：
 - `MsiAffinityUtility_v9.exe`（単一のスタンドアロン実行ファイル）
 - ダウンロード後、**右クリックして「管理者として実行」** してください。
 

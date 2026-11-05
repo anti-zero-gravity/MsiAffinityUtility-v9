@@ -93,7 +93,7 @@ Restricting affinity to **a single CPU core does NOT cause Windows to automatica
 
 ## Download
 
-Pre-built binaries can be downloaded directly from the **[Releases](../../releases)** page:
+Pre-built binaries can be downloaded directly from the **[Releases](https://github.com/anti-zero-gravity/MsiAffinityUtility-v9/releases)** page:
 - Download `MsiAffinityUtility_v9.exe` (Single-file executable)
 - Run as Administrator
 
