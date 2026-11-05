@@ -275,6 +275,7 @@ namespace MsiAffinityUtility
             dgv.SelectionChanged += Dgv_SelectionChanged;
             dgv.CellValueChanged += Dgv_CellValueChanged;
             dgv.CurrentCellDirtyStateChanged += Dgv_CurrentCellDirtyStateChanged;
+            dgv.EditingControlShowing += Dgv_EditingControlShowing;
 
             SetupColumns(rowHeight);
 
@@ -481,6 +482,24 @@ namespace MsiAffinityUtility
             }
         }
 
+        private void Dgv_EditingControlShowing(object? sender, DataGridViewEditingControlShowingEventArgs e)
+        {
+            if (e.Control is ComboBox combo)
+            {
+                combo.SelectionChangeCommitted -= Combo_SelectionChangeCommitted;
+                combo.SelectionChangeCommitted += Combo_SelectionChangeCommitted;
+            }
+        }
+
+        private void Combo_SelectionChangeCommitted(object? sender, EventArgs e)
+        {
+            this.BeginInvoke(new Action(() =>
+            {
+                dgv.CommitEdit(DataGridViewDataErrorContexts.Commit);
+                dgv.EndEdit();
+            }));
+        }
+
         private void Dgv_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0) return;
@@ -524,6 +543,7 @@ namespace MsiAffinityUtility
 
         private (string applyScript, string rollbackScript, int changeCount) GenerateRegistryScripts(bool fromLaunchSnapshot = false)
         {
+            dgv.EndEdit();
             var applySb = new StringBuilder();
             applySb.AppendLine("Windows Registry Editor Version 5.00");
             applySb.AppendLine();
@@ -741,6 +761,7 @@ namespace MsiAffinityUtility
 
         private void BtnGenerate_Click(object? sender, EventArgs e)
         {
+            dgv.EndEdit();
             var (apply, rollback, _) = GenerateRegistryScripts(fromLaunchSnapshot: false);
             applyRegScript = apply;
             rollbackRegScript = rollback;
@@ -826,6 +847,8 @@ namespace MsiAffinityUtility
 
         private void BtnExport_Click(object? sender, EventArgs e)
         {
+            dgv.EndEdit();
+
             // Export を押したら即座に Rollback / Backup プレビューへ切り替えてハイライト
             SwitchConsoleView(true);
 
@@ -909,6 +932,8 @@ namespace MsiAffinityUtility
 
         private void BtnApply_Click(object? sender, EventArgs e)
         {
+            dgv.EndEdit();
+
             // Apply を押したら即座に Apply Changes プレビューへ切り替えてハイライト
             SwitchConsoleView(false);
 
