@@ -128,6 +128,14 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 
 ---
 
+## 関連プロジェクト（Companion Tool）
+
+- **[Audio Thread Isolator (ATI)](https://github.com/anti-zero-gravity/AudioThreadIsolator)**
+  本ツール（MSI Affinity Utility v9）で GPU 等のデバイス割り込み（MSI / IRQ）を退避させて空けた専用 CPU コアに対し、`audiodg.exe`・WASAPI・ASIO・Voicemeeter・Roon・DAW・ブラウザ等の**オーディオスレッドのみを自動特定して隔離し、通常スレッドの退避およびプロセス／スレッド優先度制御を行う** Windows 用常駐ユーティリティです。
+  Windows 標準の MMCSS（Multimedia Class Scheduler Service）による強制的な優先度引き上げと周期的な降格（優先度変動）、および OS の動的優先度ブーストを抑止し、**Windows のオーディオ処理を Linux の ALSA のような揺らぎのない固定優先度動作にする**ためのツールとして設計されています。ハードウェア割り込み層（本ツール）とソフトウェアスレッド層（ATI）を組み合わせることで、一貫したオーディオ専用 CPU コア分離環境を構築できます。
+
+---
+
 ## クレジット・謝辞
 
 - [Guru3D フォーラム](https://forums.guru3d.com/) の有志による元祖 **MSI Utility** のアイデアと解析情報に深く感謝いたします。
