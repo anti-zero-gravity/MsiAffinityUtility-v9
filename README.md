@@ -128,6 +128,14 @@ The output executable will be placed in `./publish/MsiAffinityUtility.exe`.
 
 ---
 
+## Related Project (Companion Tool)
+
+- **[Audio Thread Isolator (ATI)](https://github.com/anti-zero-gravity/AudioThreadIsolator)**
+  A lightweight Windows utility designed to work alongside **MSI Affinity Utility v9**. Once you use MSI Affinity Utility v9 to evacuate device interrupts (GPU, etc.) away from a designated CPU core, **Audio Thread Isolator (ATI)** automatically identifies and isolates real-time audio threads (`audiodg.exe`, WASAPI, ASIO, Voicemeeter, Roon, DAWs, browsers) onto that dedicated core while evacuating non-audio threads and managing process/thread priorities.
+  Designed to replace Windows MMCSS's forced priority overrides, periodic quota demotions, and OS dynamic priority boosts, ATI brings **deterministic, Linux ALSA-like fixed-priority operation** to Windows audio playback.
+
+---
+
 ## Credits & Acknowledgements
 
 - Based on the concept and reverse-engineering of the community **MSI Utility** from the [Guru3D Forums](https://forums.guru3d.com/).
